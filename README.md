@@ -17,3 +17,4 @@ https://kali.download/nethunter-images/current/rootfs/
 2. Move this rootfs directly to the root directory of the module, then compress it into a zip file, and use KernelSU to flash it in.
 
 ## Improvement with my code is welcomed! Feel free to contact with me!
+Known issue: cant automatically uninstall apks when uninstall from kernelSU manager
