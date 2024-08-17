@@ -6,7 +6,7 @@ And as for this repo, my idea comes form [poxiao676/Nethunter_KSU_Module ](https
 
 The difference is that I updated the install script and the dependency. I'll continually update this when official update comes out.
 
-I have uploaded some large file via LFS, so this is why I didnt fork from poxiao
+I have uploaded some large file via LFS, so this is why I didnt fork from poxiao. But I really appreciate his work.
 
 ## Here is how to use it:
 
