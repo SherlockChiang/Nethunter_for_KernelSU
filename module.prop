@@ -1,0 +1,7 @@
+id=Kali-NetHunter-Ksu
+name=Kali-NetHunter for KernelSU
+version=1.2.0
+versionCode=11000
+author=Nethunter-Team @ gitlab & Uranium92
+description=Kali-NetHunter apps, binary, firmwares, chroot
+template=1510
