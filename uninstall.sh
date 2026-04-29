@@ -1,87 +1,45 @@
-#!/bin/bash
+#!/system/bin/sh
+## Kali NetHunter for KernelSU — uninstall hook
+##
+## KernelSU runs this AT BOOT, before system_server is up — so `pm`,
+## `settings`, `setenforce` are not yet available. We can only do
+## filesystem-level cleanup here. App uninstalls + setting restores are
+## handled by service.sh once system_server is alive (see common/service.sh).
 
-# Define Several Variables 
-[ -z $TMPDIR ] && TMPDIR=/dev/tmp;
 NHSYS=/data/local/nhsystem
-ROOTFS="$NHSYS/kalifs"
-PRECHROOT=`find /data/local/nhsystem -type d -iname kali-* | head -n 1`
+PRECHROOT=$(find "$NHSYS" -maxdepth 1 -type d -name "kali-*" 2>/dev/null | head -n 1)
 
-# Function to unmount file systems safely
 f_umount_fs() {
-    if mountpoint -q $PRECHROOT/$1; then
-        umount -f $PRECHROOT/$1
+    if mountpoint -q "$PRECHROOT/$1" 2>/dev/null; then
+        umount -f "$PRECHROOT/$1" 2>/dev/null \
+            || umount -l "$PRECHROOT/$1" 2>/dev/null
     fi
-    if [ -d $PRECHROOT/$1 ]; then
-        echo "Removing directory: $PRECHROOT/$1"
-        rm -rf $PRECHROOT/$1
-    else
-        echo "Directory not found: $PRECHROOT/$1"
-    fi
+    [ -d "$PRECHROOT/$1" ] && rm -rf "$PRECHROOT/$1"
 }
 
-# Function to clean up directories and unmount file systems
 do_umount() {
-    for i in "dev/pts" "dev/shm" dev proc sys system; do
+    for i in dev/pts dev/shm dev proc sys system; do
         f_umount_fs "$i"
     done
-
-    if mountpoint -q $PRECHROOT/sdcard; then
-        umount -l $PRECHROOT/sdcard
-        echo "Unmounted sdcard"
-    else
-        echo "sdcard not mounted"
+    if mountpoint -q "$PRECHROOT/sdcard" 2>/dev/null; then
+        umount -l "$PRECHROOT/sdcard" 2>/dev/null
     fi
-    rm -rf $PRECHROOT/sdcard
-
-    # Final unmount and clean up
-    if [ -d "$PRECHROOT" ]; then
-        echo "Unmounting and removing $PRECHROOT"
-        umount -f $PRECHROOT
-        rm -rf $PRECHROOT
-    else
-        echo "Directory $PRECHROOT does not exist"
+    rm -rf "$PRECHROOT/sdcard" 2>/dev/null
+    if mountpoint -q "$PRECHROOT" 2>/dev/null; then
+        umount -f "$PRECHROOT" 2>/dev/null || umount -l "$PRECHROOT" 2>/dev/null
     fi
 }
 
-# Function to remove installed apps safely
-remove_apps() {
-    APPS=("com.offsec.nethunter" "com.offsec.nethunter.kex" "com.offsec.nhterm" "com.offsec.nethunter.store")
-    for APP in "${APPS[@]}"; do
-        if pm list packages | grep -q $APP; then
-            pm uninstall $APP &>/dev/null
-            echo "Uninstalled $APP"
-        else
-            echo "$APP not installed"
-        fi
-    done
-}
-
-# Function to restore permissions and SELinux enforcing state
-restore_settings() {
-    [[ "$(getenforce)" == "Enforcing" ]] && ENFORCE=true || ENFORCE=false
-    settings put global verifier_verify_adb_installs 1
-    echo "Restored ADB install verification setting"
-
-    ${ENFORCE} && setenforce 1
-    echo "SELinux enforcing state restored"
-}
-
-# Unmount and clean up the chroot environment safely
+# Tear down chroot mounts and remove the rootfs tree
 if [ -d "$PRECHROOT" ]; then
     do_umount
-else
-    echo "No chroot environment found at $PRECHROOT"
 fi
+[ -d "$NHSYS" ] && rm -rf "$NHSYS"
 
-# Remove NetHunter system and app files safely
-if [ -d "$NHSYS" ]; then
-    rm -rf $NHSYS
-    echo "Removed NetHunter system files at $NHSYS"
-else
-    echo "$NHSYS directory does not exist"
-fi
+# Leave a breadcrumb for service.sh — it'll uninstall the apks once Android
+# framework is up, on the *next* boot (this script's own module dir is
+# already being removed by KSU, so we drop the flag in /data/local).
+mkdir -p /data/local/tmp
+: > /data/local/tmp/.nethunter-uninstall-pending
 
-remove_apps
-
-# Restore system settings
-restore_settings
+exit 0

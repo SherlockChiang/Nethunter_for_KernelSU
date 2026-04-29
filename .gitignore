@@ -1,0 +1,20 @@
+# Local Claude/agent state
+.claude/
+
+# Built module artifact (re-zip locally before flashing)
+Nethunter_for_KernelSU.zip
+*.zip
+!source/**/*.zip
+
+# Files >100 MB that GitHub rejects without LFS — distribute via Releases
+data/app/NetHunterKeX.apk
+kali-nethunter-rootfs-minimal-arm64.tar.xz
+
+# Reference upstream installers (huge, fetch separately)
+source/
+
+# Editor / OS junk
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
