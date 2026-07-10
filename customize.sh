@@ -10,10 +10,8 @@
 ##   * No on-the-fly kernel flash (boot-patcher / magic-flash.sh): a KSU module
 ##     cannot patch boot.img — users wanting kernel-side NetHunter features must
 ##     flash a NetHunter-patched kernel separately.
-##   * Firmware blobs ship inside the module's system/etc/firmware/ tree so that
-##     KernelSU's overlay layers them onto /system/etc/firmware/ at boot — this
-##     is what makes external USB Wi-Fi adapters & HID gadgets work on stock
-##     Xiaomi 15 kernels (see README).
+##   * Firmware blobs ship inside the module's system/etc/firmware/ tree so a
+##     compatible KernelSU mounting metamodule can expose them at boot.
 
 SKIPUNZIP=1
 
@@ -45,7 +43,6 @@ fi
 #-----------------------------------------------------------------------------
 make_symlink() {
     ln -sf "$1" "$2" 2>/dev/null
-    chmod 755 "$2" 2>/dev/null
 }
 
 expected_hash() {
@@ -292,10 +289,12 @@ install_nethunter() {
     cp -a "$TMP/system"/. "$TARGET/" || abort "! Failed to copy system overlay"
     [ -f "$TMP/uninstall.sh" ] || abort "! Uninstall hook is missing"
     [ -f "$TMP/action.sh" ] || abort "! Manager action is missing"
+    [ -f "$TMP/module.prop" ] || abort "! Module metadata is missing"
     [ -f "$TMP/common/post-fs-data.sh" ] || abort "! post-fs-data hook is missing"
     [ -f "$TMP/common/service.sh" ] || abort "! Service hook is missing"
     cp -a "$TMP/uninstall.sh" "$MODPATH/uninstall.sh" || abort "! Failed to install uninstall hook"
     cp -a "$TMP/action.sh" "$MODPATH/action.sh" || abort "! Failed to install manager action"
+    cp -a "$TMP/module.prop" "$MODPATH/module.prop" || abort "! Failed to install module metadata"
     cp -a "$TMP/common/post-fs-data.sh" "$MODPATH/post-fs-data.sh" || abort "! Failed to install post-fs-data hook"
     cp -a "$TMP/common/service.sh" "$MODPATH/service.sh" || abort "! Failed to install service hook"
 
