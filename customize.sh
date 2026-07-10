@@ -1,14 +1,12 @@
-#!/bin/bash
-## Kali NetHunter for KernelSU — installer
+#!/system/bin/sh
+## Kali NetHunter for KernelSU - native installer
 ##
-## Sourced by META-INF/com/google/android/update-binary (KernelSU module flow).
+## Sourced by KernelSU's built-in module installer.
 ## Adapted from the official Kali NetHunter 2026.1 generic-arm64-full installer
 ## (META-INF/com/google/android/update-magisk + tools/install-chroot.sh).
 ##
 ## Differences vs. the Magisk-targeted upstream:
-##   * No magisk util_functions.sh dependency at the chroot stage — KernelSU
-##     already exports MODPATH/MNT/NVBASE/MODID via update-binary, and busybox
-##     is provided by /data/adb/ksu/bin/busybox (handled by post-fs-data.sh).
+##   * Uses KernelSU's native customize.sh contract and installer helpers.
 ##   * No on-the-fly kernel flash (boot-patcher / magic-flash.sh): a KSU module
 ##     cannot patch boot.img — users wanting kernel-side NetHunter features must
 ##     flash a NetHunter-patched kernel separately.
@@ -17,28 +15,15 @@
 ##     is what makes external USB Wi-Fi adapters & HID gadgets work on stock
 ##     Xiaomi 15 kernels (see README).
 
-SKIPMOUNT=false
-PROPFILE=false
-POSTFSDATA=true
-LATESTARTSERVICE=true
+SKIPUNZIP=1
+
+[ "$KSU" = true ] || abort "! Install this module with KernelSU Manager"
+[ "$ARCH" = arm64 ] || abort "! This package supports arm64 devices only"
 
 #-----------------------------------------------------------------------------
-# Variables — most are exported by update-binary; we just fall back safely.
+# Variables supplied by KernelSU, plus installer-local paths.
 #-----------------------------------------------------------------------------
-[ -z "$TMPDIR" ] && TMPDIR=/dev/tmp
-[ -n "$ZIP" ] && { ZIPFILE="$ZIP"; unset ZIP; }
-[ -z "$ZIPFILE" ] && ZIPFILE="$3"
-DIR=$(dirname "$ZIPFILE")
-
-# update-binary already set MODID before sourcing us. Keep a local fallback.
-file_getprop() { grep "^$2" "$1" | head -n1 | cut -d= -f2-; }
-[ -z "$MODID" ] && MODID=$(file_getprop "$TMPDIR/module.prop" id)
-TMP="$TMPDIR/$MODID"
-
-# Modules root paths (KernelSU uses the same /data/adb layout as Magisk).
-[ -z "$NVBASE" ] && NVBASE=/data/adb
-[ -z "$MODPATH" ] && MODPATH="$NVBASE/modules_update/$MODID"
-MNT="$NVBASE/modules_update"
+TMP="$TMPDIR/nethunter"
 
 # Targets inside the module — overlayed onto /system at boot by KernelSU.
 TARGET="$MODPATH/system"
@@ -58,24 +43,7 @@ fi
 #-----------------------------------------------------------------------------
 # Helpers
 #-----------------------------------------------------------------------------
-set_perm() {
-    chown "$2:$3" "$1" || return 1
-    chmod "$4" "$1" || return 1
-    CON=$5
-    [ -z "$CON" ] && CON=u:object_r:system_file:s0
-    chcon "$CON" "$1" || return 1
-}
-
-set_perm_recursive() {
-    find "$1" -type d 2>/dev/null | while read -r dir; do
-        set_perm "$dir" "$2" "$3" "$4" "$6"
-    done
-    find "$1" -type f -o -type l 2>/dev/null | while read -r file; do
-        set_perm "$file" "$2" "$3" "$5" "$6"
-    done
-}
-
-symlink() {
+make_symlink() {
     ln -sf "$1" "$2" 2>/dev/null
     chmod 755 "$2" 2>/dev/null
 }
@@ -251,7 +219,7 @@ do_chroot() {
 }
 
 #-----------------------------------------------------------------------------
-# print_modname / on_install — called back from update-binary
+# Installer entry point
 #-----------------------------------------------------------------------------
 print_modname() {
     ui_print "##################################################"
@@ -270,11 +238,11 @@ print_modname() {
     ui_print "##################################################"
 }
 
-on_install() {
+install_nethunter() {
     UMASK=$(umask)
     umask 022
 
-    # Stage the full zip contents (everything except the heavy rootfs) into $TMP
+    # Stage the payload without retaining the large rootfs in the module.
     rm -rf "$TMP"
     mkdir -p "$TMP"
     cd "$TMP" || abort "! Cannot cd to $TMP"
@@ -284,8 +252,12 @@ on_install() {
 
     # Stage system overlay (firmware, xbin/hid-keyboard, etc.) into $MODPATH
     ui_print "- Copying system overlay into module"
+    mkdir -p "$TARGET"
     [ -d "$TMP/system" ]      && cp -a "$TMP/system"/. "$TARGET/"
     [ -d "$TMP/data" ]        && mkdir -p "$MODPATH/data" && cp -a "$TMP/data"/. "$MODPATH/data/"
+    [ -f "$TMP/uninstall.sh" ] && cp -a "$TMP/uninstall.sh" "$MODPATH/uninstall.sh"
+    [ -f "$TMP/common/post-fs-data.sh" ] && cp -a "$TMP/common/post-fs-data.sh" "$MODPATH/post-fs-data.sh"
+    [ -f "$TMP/common/service.sh" ] && cp -a "$TMP/common/service.sh" "$MODPATH/service.sh"
 
     #-------------------------------------------------------------------------
     # SELinux + ADB install verifier — temporarily relax so `pm install` works
@@ -363,7 +335,7 @@ on_install() {
         ui_print "- Symlinking bootkali scripts"
         mkdir -p "$BIN"
         for s in bootkali bootkali_init bootkali_login bootkali_bash killkali; do
-            symlink "/data/data/com.offsec.nethunter/assets/scripts/$s" "$BIN/$s"
+            make_symlink "/data/data/com.offsec.nethunter/assets/scripts/$s" "$BIN/$s"
         done
     fi
 
@@ -400,3 +372,6 @@ on_install() {
     ui_print "************************************************"
     ui_print " "
 }
+
+print_modname
+install_nethunter
