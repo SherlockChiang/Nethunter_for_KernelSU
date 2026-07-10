@@ -1,10 +1,9 @@
 #!/system/bin/sh
 ## Kali NetHunter for KernelSU — uninstall hook
 ##
-## KernelSU runs this AT BOOT, before system_server is up — so `pm`,
-## `settings`, `setenforce` are not yet available. We can only do
-## filesystem-level cleanup here. App uninstalls + setting restores are
-## handled by service.sh once system_server is alive (see common/service.sh).
+## KernelSU runs this before Android's package manager is available, so this
+## hook performs filesystem cleanup only. Run the module action in KernelSU
+## Manager before removal if the bundled apps should also be uninstalled.
 
 NHSYS=/data/local/nhsystem
 PRECHROOT=$(find "$NHSYS" -maxdepth 1 -type d -name "kali-*" 2>/dev/null | head -n 1)
@@ -46,11 +45,5 @@ case "$NHSYS" in
     /data/local/nhsystem) [ -d "$NHSYS" ] && rm -rf -- "$NHSYS" ;;
     *) echo "NetHunter uninstall: refusing unsafe path: $NHSYS" >&2; exit 1 ;;
 esac
-
-# Leave a breadcrumb for service.sh — it'll uninstall the apks once Android
-# framework is up, on the *next* boot (this script's own module dir is
-# already being removed by KSU, so we drop the flag in /data/local).
-mkdir -p /data/local/tmp
-: > /data/local/tmp/.nethunter-uninstall-pending
 
 exit 0

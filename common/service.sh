@@ -1,17 +1,10 @@
 #!/system/bin/sh
 ## Kali NetHunter for KernelSU — late_start service hook
 ##
-## Runs after system_server is up (so `pm` / `settings` work). Used to:
-##   1. Honour an uninstall left pending by uninstall.sh — uninstall.sh runs
-##      pre-Android-framework so it cannot call `pm`, it just leaves a flag
-##      at /data/local/tmp/.nethunter-uninstall-pending and we finish the job
-##      here on the next boot.
-##   2. (Optionally) auto-grant runtime permissions if NetHunter.apk has
-##      since been installed via NetHunter Store.
+## Runs after system_server is up to grant supported runtime permissions if
+## NetHunter.apk is installed or updated later.
 
 MODDIR=${0%/*}
-
-PENDING=/data/local/tmp/.nethunter-uninstall-pending
 
 # ---- Wait until pm is actually usable ----------------------------------
 i=0
@@ -20,20 +13,6 @@ while [ $i -lt 60 ]; do
     sleep 2
     i=$((i + 1))
 done
-
-# ---- Pending uninstall: drop all NetHunter packages --------------------
-if [ -f "$PENDING" ]; then
-    for app in com.offsec.nethunter \
-               com.offsec.nethunter.kex \
-               com.offsec.nhterm \
-               com.offsec.nethunter.store \
-               com.offsec.nethunter.store.privileged; do
-        pm uninstall "$app" >/dev/null 2>&1
-    done
-    settings put global verifier_verify_adb_installs 1 2>/dev/null
-    rm -f "$PENDING"
-    exit 0
-fi
 
 # ---- Auto-grant on subsequent boots if main app got installed later ----
 if pm list packages 2>/dev/null | grep -q '^package:com.offsec.nethunter$'; then

@@ -263,9 +263,11 @@ install_nethunter() {
     [ -d "$TMP/system" ] || abort "! System overlay is missing"
     cp -a "$TMP/system"/. "$TARGET/" || abort "! Failed to copy system overlay"
     [ -f "$TMP/uninstall.sh" ] || abort "! Uninstall hook is missing"
+    [ -f "$TMP/action.sh" ] || abort "! Manager action is missing"
     [ -f "$TMP/common/post-fs-data.sh" ] || abort "! post-fs-data hook is missing"
     [ -f "$TMP/common/service.sh" ] || abort "! Service hook is missing"
     cp -a "$TMP/uninstall.sh" "$MODPATH/uninstall.sh" || abort "! Failed to install uninstall hook"
+    cp -a "$TMP/action.sh" "$MODPATH/action.sh" || abort "! Failed to install manager action"
     cp -a "$TMP/common/post-fs-data.sh" "$MODPATH/post-fs-data.sh" || abort "! Failed to install post-fs-data hook"
     cp -a "$TMP/common/service.sh" "$MODPATH/service.sh" || abort "! Failed to install service hook"
 
