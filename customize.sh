@@ -216,6 +216,7 @@ do_chroot() {
     done
 
     ui_print "  ! No Kali rootfs archive found — skipping chroot install"
+    return 1
 }
 
 #-----------------------------------------------------------------------------
@@ -248,28 +249,19 @@ install_nethunter() {
     cd "$TMP" || abort "! Cannot cd to $TMP"
     ui_print "- Unpacking installer payload"
     unzip -qq "$ZIPFILE" -x "kalifs-*" "kali-nethunter-rootfs-*" >&2 \
-        || ui_print "  ! Some files failed to extract"
+        || abort "! Failed to extract installer payload"
 
     # Stage system overlay (firmware, xbin/hid-keyboard, etc.) into $MODPATH
     ui_print "- Copying system overlay into module"
-    mkdir -p "$TARGET"
-    [ -d "$TMP/system" ]      && cp -a "$TMP/system"/. "$TARGET/"
-    [ -d "$TMP/data" ]        && mkdir -p "$MODPATH/data" && cp -a "$TMP/data"/. "$MODPATH/data/"
-    [ -f "$TMP/uninstall.sh" ] && cp -a "$TMP/uninstall.sh" "$MODPATH/uninstall.sh"
-    [ -f "$TMP/common/post-fs-data.sh" ] && cp -a "$TMP/common/post-fs-data.sh" "$MODPATH/post-fs-data.sh"
-    [ -f "$TMP/common/service.sh" ] && cp -a "$TMP/common/service.sh" "$MODPATH/service.sh"
-
-    #-------------------------------------------------------------------------
-    # SELinux + ADB install verifier — temporarily relax so `pm install` works
-    #-------------------------------------------------------------------------
-    if [ "$(getenforce 2>/dev/null)" = "Enforcing" ]; then
-        ENFORCE=true
-        setenforce 0
-    else
-        ENFORCE=false
-    fi
-    VERIFY=$(settings get global verifier_verify_adb_installs 2>/dev/null)
-    settings put global verifier_verify_adb_installs 0 2>/dev/null
+    mkdir -p "$TARGET" || abort "! Cannot create module system directory"
+    [ -d "$TMP/system" ] || abort "! System overlay is missing"
+    cp -a "$TMP/system"/. "$TARGET/" || abort "! Failed to copy system overlay"
+    [ -f "$TMP/uninstall.sh" ] || abort "! Uninstall hook is missing"
+    [ -f "$TMP/common/post-fs-data.sh" ] || abort "! post-fs-data hook is missing"
+    [ -f "$TMP/common/service.sh" ] || abort "! Service hook is missing"
+    cp -a "$TMP/uninstall.sh" "$MODPATH/uninstall.sh" || abort "! Failed to install uninstall hook"
+    cp -a "$TMP/common/post-fs-data.sh" "$MODPATH/post-fs-data.sh" || abort "! Failed to install post-fs-data hook"
+    cp -a "$TMP/common/service.sh" "$MODPATH/service.sh" || abort "! Failed to install service hook"
 
     #-------------------------------------------------------------------------
     # Remove legacy installs (apps + previous nhsystem)
@@ -343,21 +335,15 @@ install_nethunter() {
     # Install the chroot/rootfs
     #-------------------------------------------------------------------------
     ui_print "- Installing Kali chroot"
-    do_chroot
+    do_chroot || abort "! Kali chroot installation failed"
 
     #-------------------------------------------------------------------------
     # Permissions on everything we dropped into the module
     #-------------------------------------------------------------------------
     ui_print "- Fixing permissions"
-    set_perm_recursive "$TARGET" 0 0 0755 0644
-    [ -d "$BIN" ]  && set_perm_recursive "$BIN"  0 0 0755 0755
-    [ -d "$XBIN" ] && set_perm_recursive "$XBIN" 0 0 0755 0755
-
-    #-------------------------------------------------------------------------
-    # Restore SELinux + verifier
-    #-------------------------------------------------------------------------
-    [ -n "$VERIFY" ] && settings put global verifier_verify_adb_installs "$VERIFY" 2>/dev/null
-    $ENFORCE && setenforce 1
+    set_perm_recursive "$TARGET" 0 0 0755 0644 || abort "! Failed to set overlay permissions"
+    [ ! -d "$BIN" ]  || set_perm_recursive "$BIN"  0 0 0755 0755 || abort "! Failed to set bin permissions"
+    [ ! -d "$XBIN" ] || set_perm_recursive "$XBIN" 0 0 0755 0755 || abort "! Failed to set xbin permissions"
 
     umask "$UMASK"
 
