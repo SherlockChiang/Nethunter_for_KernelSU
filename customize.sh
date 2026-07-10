@@ -48,6 +48,17 @@ make_symlink() {
     chmod 755 "$2" 2>/dev/null
 }
 
+expected_hash() {
+    awk -v file="$1" '$2 == file { print $1; exit }' "$TMP/artifacts.sha256"
+}
+
+verify_artifact() {
+    expected=$(expected_hash "$1")
+    [ -n "$expected" ] || return 1
+    actual=$(sha256sum "$2" 2>/dev/null | awk '{ print $1 }')
+    [ "$actual" = "$expected" ]
+}
+
 #-----------------------------------------------------------------------------
 # Chroot installation and safe replacement.
 #-----------------------------------------------------------------------------
@@ -138,6 +149,11 @@ do_install() {
     mkdir -p "$STAGE" || return 1
 
     unzip -p "$ZIPFILE" "$KALIFS" > "$ARCHIVE" || {
+        rm -rf "$STAGE" "$ARCHIVE"
+        return 1
+    }
+    verify_artifact "$KALIFS" "$ARCHIVE" || {
+        ui_print "  ! Rootfs checksum does not match artifacts.sha256"
         rm -rf "$STAGE" "$ARCHIVE"
         return 1
     }
@@ -256,6 +272,18 @@ install_nethunter() {
     ui_print "- Unpacking installer payload"
     unzip -qq "$ZIPFILE" -x "kalifs-*" "kali-nethunter-rootfs-*" >&2 \
         || abort "! Failed to extract installer payload"
+    [ -f "$TMP/artifacts.sha256" ] || abort "! Artifact checksum manifest is missing"
+    for artifact in data/app/NetHunter.apk \
+                    data/app/NetHunterTerminal.apk \
+                    data/app/NetHunterKeX.apk \
+                    data/app/NetHunterStore.apk \
+                    data/app/NetHunterStorePrivilegedExtension.apk \
+                    system/xbin/busybox_nh-1.37.0 \
+                    system/xbin/hid-keyboard \
+                    tools/screenres; do
+        verify_artifact "$artifact" "$TMP/$artifact" \
+            || abort "! Artifact checksum failed: $artifact"
+    done
 
     # Stage system overlay (firmware, xbin/hid-keyboard, etc.) into $MODPATH
     ui_print "- Copying system overlay into module"
