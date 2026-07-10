@@ -39,21 +39,20 @@ fi
 if pm list packages 2>/dev/null | grep -q '^package:com.offsec.nethunter$'; then
     GRANTED_FLAG=$MODDIR/.permissions-granted
     if [ ! -f "$GRANTED_FLAG" ]; then
-        for x in ACCESS_BACKGROUND_LOCATION \
-                 ACCESS_COARSE_LOCATION \
+        grants_ok=true
+        for x in ACCESS_COARSE_LOCATION \
                  ACCESS_FINE_LOCATION \
                  READ_EXTERNAL_STORAGE \
-                 WRITE_EXTERNAL_STORAGE \
-                 WRITE_SECURE_SETTINGS \
-                 RECEIVE_BOOT_COMPLETED \
-                 WAKE_LOCK \
-                 VIBRATE \
-                 FOREGROUND_SERVICE; do
-            pm grant -g com.offsec.nethunter "android.permission.$x" >/dev/null 2>&1
+                 WRITE_EXTERNAL_STORAGE; do
+            pm grant --user 0 com.offsec.nethunter "android.permission.$x" >/dev/null 2>&1 \
+                || grants_ok=false
         done
-        for x in RUN_SCRIPT RUN_SCRIPT_SU RUN_SCRIPT_NH RUN_SCRIPT_NH_LOGIN; do
-            pm grant -g com.offsec.nethunter "com.offsec.nhterm.permission.$x" >/dev/null 2>&1
-        done
-        : > "$GRANTED_FLAG"
+        API=$(getprop ro.build.version.sdk)
+        if [ "$API" -ge 29 ] 2>/dev/null; then
+            pm grant --user 0 com.offsec.nethunter \
+                android.permission.ACCESS_BACKGROUND_LOCATION >/dev/null 2>&1 \
+                || grants_ok=false
+        fi
+        $grants_ok && : > "$GRANTED_FLAG"
     fi
 fi

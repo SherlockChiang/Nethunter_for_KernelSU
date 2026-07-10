@@ -270,31 +270,19 @@ install_nethunter() {
     cp -a "$TMP/common/service.sh" "$MODPATH/service.sh" || abort "! Failed to install service hook"
 
     #-------------------------------------------------------------------------
-    # Remove legacy installs (apps + previous nhsystem)
-    #-------------------------------------------------------------------------
-    ui_print "- Removing previous NetHunter installation"
-    pm uninstall com.offsec.nethunter        &>/dev/null
-    pm uninstall com.offsec.nethunter.kex    &>/dev/null
-    pm uninstall com.offsec.nhterm           &>/dev/null
-    pm uninstall com.offsec.nethunter.store  &>/dev/null
-    pm uninstall com.offsec.nethunter.store.privileged &>/dev/null
-
-    #-------------------------------------------------------------------------
-    # Install NetHunter apps
+    # Install or update NetHunter apps without deleting existing app data.
     #-------------------------------------------------------------------------
     ui_print "- Installing NetHunter apps"
     APKDIR="$TMP/data/app"
     for apk in NetHunter.apk NetHunterTerminal.apk NetHunterKeX.apk; do
-        if [ -f "$APKDIR/$apk" ]; then
-            ui_print "  - $apk"
-            pm install "$APKDIR/$apk" &>/dev/null || ui_print "    ! $apk failed"
-        fi
+        [ -f "$APKDIR/$apk" ] || abort "! Required APK is missing: $apk"
+        ui_print "  - $apk"
+        pm install -r "$APKDIR/$apk" >/dev/null 2>&1 || abort "! Failed to install $apk"
     done
     for apk in NetHunterStore.apk NetHunterStorePrivilegedExtension.apk; do
-        if [ -f "$APKDIR/$apk" ]; then
-            ui_print "  - $apk (granted)"
-            pm install -g "$APKDIR/$apk" &>/dev/null || ui_print "    ! $apk failed"
-        fi
+        [ -f "$APKDIR/$apk" ] || abort "! Required APK is missing: $apk"
+        ui_print "  - $apk"
+        pm install -r -g "$APKDIR/$apk" >/dev/null 2>&1 || abort "! Failed to install $apk"
     done
 
     #-------------------------------------------------------------------------
@@ -306,21 +294,14 @@ install_nethunter() {
     #-------------------------------------------------------------------------
     if pm list packages 2>/dev/null | grep -q '^package:com.offsec.nethunter$'; then
         ui_print "- Granting runtime permissions"
-        for x in ACCESS_BACKGROUND_LOCATION \
-                 ACCESS_COARSE_LOCATION \
+        for x in ACCESS_COARSE_LOCATION \
                  ACCESS_FINE_LOCATION \
                  READ_EXTERNAL_STORAGE \
-                 WRITE_EXTERNAL_STORAGE \
-                 WRITE_SECURE_SETTINGS \
-                 RECEIVE_BOOT_COMPLETED \
-                 WAKE_LOCK \
-                 VIBRATE \
-                 FOREGROUND_SERVICE; do
-            pm grant -g com.offsec.nethunter "android.permission.$x" &>/dev/null
+                 WRITE_EXTERNAL_STORAGE; do
+            pm grant --user 0 com.offsec.nethunter "android.permission.$x" >/dev/null 2>&1 || true
         done
-        for x in RUN_SCRIPT RUN_SCRIPT_SU RUN_SCRIPT_NH RUN_SCRIPT_NH_LOGIN; do
-            pm grant -g com.offsec.nethunter "com.offsec.nhterm.permission.$x" &>/dev/null
-        done
+        [ "$API" -lt 29 ] || pm grant --user 0 com.offsec.nethunter \
+            android.permission.ACCESS_BACKGROUND_LOCATION >/dev/null 2>&1 || true
     else
         ui_print "- NetHunter.apk not installed yet (expected on a clean install)"
         ui_print "  Open NetHunter Store, install/update NetHunter, then reboot."
@@ -359,8 +340,8 @@ install_nethunter() {
     ui_print "*==============================================*"
     ui_print "*  REBOOT now, then in KernelSU Manager grant  *"
     ui_print "*  root access to the NetHunter app before     *"
-    ui_print "*  launching it. All apps are pre-bundled and  *"
-    ui_print "*  permissions are already granted.            *"
+    ui_print "*  launching it. Review app permissions in     *"
+    ui_print "*  Android settings if a feature requests one. *"
     ui_print "************************************************"
     ui_print " "
 }
