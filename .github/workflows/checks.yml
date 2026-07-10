@@ -1,0 +1,20 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shell tools
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Run repository checks
+        run: bash tests/static.sh
+      - name: Run ShellCheck
+        run: shellcheck -x action.sh uninstall.sh common/post-fs-data.sh common/service.sh
