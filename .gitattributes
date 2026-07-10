@@ -1,2 +1,9 @@
-data/app/NetHunterKeX.apk filter=lfs diff=lfs merge=lfs -text
-kali-nethunter-rootfs-minimal-arm64.tar.xz filter=lfs diff=lfs merge=lfs -text
+* text=auto
+*.sh text eol=lf
+META-INF/com/google/android/update-binary text eol=lf
+META-INF/com/google/android/updater-script text eol=lf
+module.prop text eol=lf
+*.apk binary
+*.bin binary
+*.fw binary
+*.xz binary

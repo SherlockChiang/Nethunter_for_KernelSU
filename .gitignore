@@ -6,7 +6,7 @@ Nethunter_for_KernelSU.zip
 *.zip
 !source/**/*.zip
 
-# Files >100 MB that GitHub rejects without LFS — distribute via Releases
+# Files >100 MB that GitHub rejects — fetch and verify with artifacts.sha256
 data/app/NetHunterKeX.apk
 kali-nethunter-rootfs-minimal-arm64.tar.xz
 

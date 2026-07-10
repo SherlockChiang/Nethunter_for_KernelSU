@@ -1,43 +1,90 @@
-# Nethunter_KSU_Module
+# NetHunter for KernelSU
 
-First of all, this module is not my original, a lot of code comes from KaliNethunter official magisk module.
+KernelSU module packaging Kali NetHunter applications, an arm64 Kali rootfs,
+selected firmware, and NetHunter helper binaries. The primary test target is
+Xiaomi 15. Code in this repository is adapted in part from the official Kali
+NetHunter Magisk module and from
+[poxiao676/Nethunter_KSU_Module](https://github.com/poxiao676/Nethunter_KSU_Module).
 
-And as for this repo, my idea comes form [poxiao676/Nethunter_KSU_Module ](https://github.com/poxiao676/Nethunter_KSU_Module)
+## Requirements
 
-The difference is that I updated the install script and the dependency. I'll continually update this when official update comes out.
+- An arm64 Android device running KernelSU.
+- Installation through KernelSU Manager. Recovery flashing is not supported.
+- A KernelSU mounting metamodule such as `meta-overlayfs` for the files under
+  `system/` to be mounted. Without one, the APK and rootfs installation may
+  work, but firmware and helper overlays will not.
+- Enough free space under `/data` to stage a second rootfs during upgrades.
 
-I have uploaded some large file via LFS, so this is why I didnt fork from poxiao. But I really appreciate his work.
+Xiaomi 15 is the maintained target. Other arm64 devices are experimental and
+depend on their ROM, kernel configuration, KernelSU version, and mounting
+metamodule.
 
-## Here is how to use it
+## Build Inputs
 
-Two large files are **not** in this repo (over GitHub's 100 MB single-file limit) and have to be fetched separately before zipping the module:
+The following files exceed GitHub's normal file limit and are downloaded
+separately:
 
-1. **NetHunterKeX.apk** — grab the latest from this repo's [Releases](https://github.com/SherlockChiang/Nethunter_for_KernelSU/releases) and drop it into `data/app/`.
-2. **Kali rootfs** — from <https://kali.download/nethunter-images/current/rootfs/>. Either naming style works:
-   - `kali-nethunter-rootfs-minimal-arm64.tar.xz` (current kali.download)
-   - `kalifs-minimal-arm64.tar.xz` (legacy / official-installer name)
+1. Put `NetHunterKeX.apk` in `data/app/`.
+2. Put `kali-nethunter-rootfs-minimal-arm64.tar.xz` in the repository root.
+3. Verify every input against `artifacts.sha256`:
 
-   Drop it into the **root** of this module folder.
+```sh
+sha256sum --check artifacts.sha256
+```
 
-3. Zip the whole module directory and flash via KernelSU Manager.
+The installer rejects payloads that do not match this manifest. When updating
+an artifact intentionally, review its upstream source and signature, then
+update the corresponding digest in the same change.
 
-## Target devices
+Create the module ZIP from the declared module files at the ZIP root. Do not
+archive the repository directory itself or include `.git`, existing ZIPs, or
+local editor state.
 
-Primary target is **Xiaomi 15** (Snapdragon 8 Elite). Should work on any arm64 Android device with KernelSU rooted, since the module only overlays files onto `/system` (firmware blobs + apps + chroot) and does **not** patch the kernel.
+## Installation
 
-## Why USB Wi-Fi / HID / BadUSB works on stock kernels
+1. Install and enable a KernelSU mounting metamodule if system overlays are
+   required.
+2. Install the module ZIP from KernelSU Manager.
+3. Reboot.
+4. Grant root access to the NetHunter application in KernelSU Manager.
+5. Review Android runtime permissions when prompted by individual features.
 
-The module ships kernel-side firmware blobs in `system/etc/firmware/` (rtlwifi, brcm, ath9k_htc, mt7601u, …). KernelSU mounts this overlay over `/system/etc/firmware/` at boot, so when you plug in an external USB Wi-Fi adapter the stock Xiaomi kernel can finally find the firmware it asks for and bring the device up. Likewise, USB-gadget tricks (HID/BadUSB, mass storage, RNDIS) work because the stock kernel already exposes `/sys/kernel/config/usb_gadget/` (`CONFIG_USB_CONFIGFS=y`, used for ADB/MTP) — NetHunter just re-configures it from userspace.
+The installer updates existing APKs in place and stages the new rootfs before
+replacing the previous one. A failed rootfs extraction keeps the previous
+chroot intact.
 
-What it does **not** do: load extra Wi-Fi drivers, enable monitor mode on the internal radio, or patch any kernel tracepoints. Those need a NetHunter-patched kernel flashed separately.
+## Uninstallation
 
-## What about the `kali-nethunterpro-2026.1-sdm845` folder
+KernelSU invokes `uninstall.sh` before Android's package manager is available.
+To remove the bundled applications as well as the module:
 
-That's **NetHunter Pro** — a standalone Phosh-based Linux distro (not an Android module) for Snapdragon 845 devices: Pixel 3 (axolotl), POCO F1 (beryllium), OnePlus 6 (enchilada), OnePlus 6T (fajita). It replaces Android entirely. Kept here only as a reference for the upstream installer scripts; it is **not relevant for Xiaomi 15** and is not used at flash time.
+1. Run the module action in KernelSU Manager while Android is running.
+2. Confirm that it reports `NetHunter apps removed`.
+3. Remove the module in KernelSU Manager and reboot.
 
-## Improvement with my code is welcomed
+If the action is skipped, remove the five NetHunter packages manually from
+Android settings. The filesystem uninstall hook refuses to delete the chroot
+while any nested mount remains.
 
-Known issue:
+## Kernel Features
 
-- cant automatically uninstall apks when uninstall from kernelSU manager
-- throws error such as cant find /system/bin/su
+Bundled firmware can only support hardware for which the running kernel already
+contains a compatible driver. It does not add kernel drivers, monitor mode to
+the internal radio, or kernel tracepoints.
+
+Likewise, configfs being present does not by itself guarantee HID, BadUSB,
+RNDIS, or mass-storage support. Those features also depend on the device's USB
+controller, kernel gadget functions, ROM behavior, and SELinux policy. A
+NetHunter-patched kernel may still be required.
+
+## Validation
+
+Run the repository checks with:
+
+```sh
+bash tests/static.sh
+```
+
+CI also runs ShellCheck on lifecycle scripts. Physical-device validation is
+still required for install, upgrade, reboot, chroot startup, module action, and
+uninstall changes.
