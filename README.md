@@ -36,9 +36,14 @@ The installer rejects payloads that do not match this manifest. When updating
 an artifact intentionally, review its upstream source and signature, then
 update the corresponding digest in the same change.
 
-Create the module ZIP from the declared module files at the ZIP root. Do not
-archive the repository directory itself or include `.git`, existing ZIPs, or
-local editor state.
+Build and validate the module ZIP with PowerShell 5.1 or newer:
+
+```powershell
+./build.ps1
+```
+
+The script uses an explicit file list, validates all artifact checksums, and
+checks that the native KernelSU entry points are present at the ZIP root.
 
 ## Installation
 

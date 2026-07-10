@@ -20,6 +20,14 @@ done
 grep -qx 'SKIPUNZIP=1' customize.sh
 grep -q '\[ "$KSU" = true \]' customize.sh
 
+for member in customize.sh action.sh artifacts.sha256 module.prop uninstall.sh; do
+    grep -q "'$member'" build.ps1
+done
+if grep -qE "^[[:space:]]*'install\.sh',[[:space:]]*$" build.ps1; then
+    echo "Build manifest contains obsolete install.sh" >&2
+    exit 1
+fi
+
 if grep -n -E 'magisk/util_functions|pm grant -g|setenforce 0|verifier_verify_adb_installs' \
     customize.sh uninstall.sh common/post-fs-data.sh common/service.sh \
     META-INF/com/google/android/update-binary; then
