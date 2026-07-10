@@ -198,7 +198,10 @@ do_install() {
     fi
     if ! mkdir -p -m 0755 "$CHROOT/dev" || ! ln -s "$CHROOT" "$ROOTFS"; then
         rm -rf "$CHROOT" "$ROOTFS"
-        [ ! -d "$BACKUP" ] || mv "$BACKUP" "$PRECHROOT"
+        if [ -d "$BACKUP" ]; then
+            mv "$BACKUP" "$PRECHROOT"
+            ln -s "$PRECHROOT" "$ROOTFS" 2>/dev/null
+        fi
         rm -rf "$STAGE"
         return 1
     fi
@@ -287,6 +290,8 @@ install_nethunter() {
     mkdir -p "$TARGET" || abort "! Cannot create module system directory"
     [ -d "$TMP/system" ] || abort "! System overlay is missing"
     cp -a "$TMP/system"/. "$TARGET/" || abort "! Failed to copy system overlay"
+    mkdir -p "$BIN" || abort "! Cannot create module bin directory"
+    cp -a "$TMP/tools/screenres" "$BIN/screenres" || abort "! Failed to install screenres"
     [ -f "$TMP/uninstall.sh" ] || abort "! Uninstall hook is missing"
     [ -f "$TMP/action.sh" ] || abort "! Manager action is missing"
     [ -f "$TMP/module.prop" ] || abort "! Module metadata is missing"
@@ -297,9 +302,19 @@ install_nethunter() {
     cp -a "$TMP/module.prop" "$MODPATH/module.prop" || abort "! Failed to install module metadata"
     cp -a "$TMP/common/post-fs-data.sh" "$MODPATH/post-fs-data.sh" || abort "! Failed to install post-fs-data hook"
     cp -a "$TMP/common/service.sh" "$MODPATH/service.sh" || abort "! Failed to install service hook"
+    set_perm "$MODPATH/action.sh" 0 0 0755 || abort "! Failed to set action permissions"
+    set_perm "$MODPATH/uninstall.sh" 0 0 0755 || abort "! Failed to set uninstall permissions"
+    set_perm "$MODPATH/post-fs-data.sh" 0 0 0755 || abort "! Failed to set post-fs-data permissions"
+    set_perm "$MODPATH/service.sh" 0 0 0755 || abort "! Failed to set service permissions"
 
     #-------------------------------------------------------------------------
-    # Install or update NetHunter apps without deleting existing app data.
+    # Install the chroot/rootfs
+    #-------------------------------------------------------------------------
+    ui_print "- Installing Kali chroot"
+    do_chroot || abort "! Kali chroot installation failed"
+
+    #-------------------------------------------------------------------------
+    # Install or update NetHunter apps after the rootfs commit succeeds.
     #-------------------------------------------------------------------------
     ui_print "- Installing NetHunter apps"
     APKDIR="$TMP/data/app"
@@ -314,44 +329,22 @@ install_nethunter() {
         pm install -r -g "$APKDIR/$apk" >/dev/null 2>&1 || abort "! Failed to install $apk"
     done
 
-    #-------------------------------------------------------------------------
-    # Grant runtime permissions to NetHunter — only if it's actually installed.
-    # The 2026.1 generic-arm64-full package doesn't ship NetHunter.apk itself
-    # (it expects users to grab it from NetHunter Store after first launch),
-    # so this block is normally skipped on a clean install and re-runs after
-    # the user updates from the Store.
-    #-------------------------------------------------------------------------
     if pm list packages 2>/dev/null | grep -q '^package:com.offsec.nethunter$'; then
-        ui_print "- Granting runtime permissions"
-        for x in ACCESS_COARSE_LOCATION \
-                 ACCESS_FINE_LOCATION \
-                 READ_EXTERNAL_STORAGE \
-                 WRITE_EXTERNAL_STORAGE; do
+        ui_print "- Granting supported runtime permissions"
+        for x in ACCESS_COARSE_LOCATION ACCESS_FINE_LOCATION \
+                 READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE; do
             pm grant --user 0 com.offsec.nethunter "android.permission.$x" >/dev/null 2>&1 || true
         done
         [ "$API" -lt 29 ] || pm grant --user 0 com.offsec.nethunter \
             android.permission.ACCESS_BACKGROUND_LOCATION >/dev/null 2>&1 || true
-    else
-        ui_print "- NetHunter.apk not installed yet (expected on a clean install)"
-        ui_print "  Open NetHunter Store, install/update NetHunter, then reboot."
     fi
 
-    #-------------------------------------------------------------------------
-    # bootkali symlinks (only available after first launch of NetHunter.apk)
-    #-------------------------------------------------------------------------
-    if [ -e /data/data/com.offsec.nethunter/assets/scripts/ ]; then
+    if [ -d /data/data/com.offsec.nethunter/assets/scripts ]; then
         ui_print "- Symlinking bootkali scripts"
-        mkdir -p "$BIN"
         for s in bootkali bootkali_init bootkali_login bootkali_bash killkali; do
             make_symlink "/data/data/com.offsec.nethunter/assets/scripts/$s" "$BIN/$s"
         done
     fi
-
-    #-------------------------------------------------------------------------
-    # Install the chroot/rootfs
-    #-------------------------------------------------------------------------
-    ui_print "- Installing Kali chroot"
-    do_chroot || abort "! Kali chroot installation failed"
 
     #-------------------------------------------------------------------------
     # Permissions on everything we dropped into the module

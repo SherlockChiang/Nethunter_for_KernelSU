@@ -5,6 +5,7 @@
 ## NetHunter.apk is installed or updated later.
 
 MODDIR=${0%/*}
+BIN="$MODDIR/system/bin"
 
 # ---- Wait until pm is actually usable ----------------------------------
 i=0
@@ -13,6 +14,15 @@ while [ $i -lt 60 ]; do
     sleep 2
     i=$((i + 1))
 done
+
+# The app creates these assets on first launch, after module installation.
+SCRIPTS=/data/data/com.offsec.nethunter/assets/scripts
+if [ -d "$SCRIPTS" ]; then
+    mkdir -p "$BIN"
+    for script in bootkali bootkali_init bootkali_login bootkali_bash killkali; do
+        [ -f "$SCRIPTS/$script" ] && ln -sf "$SCRIPTS/$script" "$BIN/$script"
+    done
+fi
 
 # ---- Auto-grant on subsequent boots if main app got installed later ----
 if pm list packages 2>/dev/null | grep -q '^package:com.offsec.nethunter$'; then
