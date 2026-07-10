@@ -1,14 +1,11 @@
 #!/system/bin/sh
 ## Kali NetHunter for KernelSU — post-fs-data hook
 ##
-## Two jobs:
-##   1. Make sure busybox_nh is available under /system/xbin (or /system/bin
-##      on devices without xbin) — NetHunter scripts hard-call this name.
+## Make sure busybox_nh is available under /system/xbin (or /system/bin on
+## devices without xbin). NetHunter scripts hard-call this unique name.
 ##      The actual binary ships in this module's system/xbin/busybox_nh-<ver>;
-##      we just create the unversioned symlink + applet symlinks here so the
-##      overlay stays self-contained.
-##   2. Fall back to KernelSU's own busybox if the bundled one is missing
-##      (older releases of this module didn't ship it).
+##      we create only the unversioned symlink so Android system utilities are
+##      never shadowed by BusyBox applets.
 
 MODDIR=${0%/*}
 
@@ -43,25 +40,7 @@ chmod 0755 "$BB"
 
 # 3) Canonical busybox_nh symlink that NetHunter scripts call
 ln -sf "$BB" "$TARGET/busybox_nh"
-[ -e "$TARGET/busybox" ] || ln -sf "$BB" "$TARGET/busybox"
 
-# 4) Applet symlinks. On /system/bin we only override applets that already
-#    exist there (so we don't shadow Android utilities); on /system/xbin we
-#    create them all.
-SYSBIN=$(ls /system/bin 2>/dev/null)
-for applet in $("$BB" --list); do
-    case "$TARGET" in
-        */bin)
-            if echo "$SYSBIN" | "$BB" grep -q "^$applet$"; then
-                "$BB" ln -sf busybox_nh "$applet"
-            fi
-            ;;
-        *)
-            "$BB" ln -sf busybox_nh "$applet"
-            ;;
-    esac
-done
-
-# 5) Permissions / SELinux context for everything we just dropped
-chmod 0755 ./*
-chcon u:object_r:system_file:s0 ./*
+# 4) Permissions / SELinux context for the private BusyBox names only
+chmod 0755 "$BB" "$TARGET/busybox_nh"
+chcon u:object_r:system_file:s0 "$BB" "$TARGET/busybox_nh" 2>/dev/null
