@@ -49,9 +49,7 @@ make_symlink() {
 }
 
 #-----------------------------------------------------------------------------
-# Chroot install (verbatim port of upstream tools/install-chroot.sh, minus the
-# Magisk-only do_umount path — on a booted KSU system we always have shell, so
-# we use the same unmount logic but without the BB-via-Magisk indirection).
+# Chroot installation and safe replacement.
 #-----------------------------------------------------------------------------
 f_kill_pids() {
     local lsof_full=$(lsof | awk '{print $1}' | grep -c '^lsof')
@@ -73,18 +71,11 @@ f_restore_setup() {
 }
 
 f_umount_fs() {
-    isAllunmounted=0
-    if mountpoint -q "$PRECHROOT/$1"; then
-        if umount -f "$PRECHROOT/$1"; then
-            if [ ! "$1" = "dev/pts" ] && [ ! "$1" = "dev/shm" ]; then
-                rm -rf "$PRECHROOT/$1" || isAllunmounted=1
-            fi
-        else
-            isAllunmounted=1
-        fi
-    elif [ -d "$PRECHROOT/$1" ]; then
-        rm -rf "$PRECHROOT/$1" || isAllunmounted=1
-    fi
+    path="$PRECHROOT/$1"
+    mountpoint -q "$path" 2>/dev/null || return 0
+    umount -f "$path" 2>/dev/null || umount -l "$path" 2>/dev/null || return 1
+    mountpoint -q "$path" 2>/dev/null && return 1
+    return 0
 }
 
 f_dir_umount() {
@@ -93,79 +84,113 @@ f_dir_umount() {
     f_kill_pids
     f_restore_setup
     ui_print "  - Removing fs mounts"
-    for i in "dev/pts" "dev/shm" dev proc sys system; do
-        f_umount_fs "$i"
+    result=0
+    for i in dev/pts dev/shm dev proc sys system sdcard; do
+        f_umount_fs "$i" || result=1
     done
-    if mount | grep -q "$PRECHROOT/sdcard"; then
-        umount -l "$PRECHROOT/sdcard" 2>/dev/null
-        rm -rf "$PRECHROOT/sdcard" 2>/dev/null
-    fi
-}
-
-f_is_mntpoint() {
-    [ -d "$PRECHROOT" ] && mountpoint -q "$PRECHROOT" && return 0
-    return 1
+    return "$result"
 }
 
 do_umount() {
-    f_is_mntpoint && f_dir_umount
-    if [ -z "$(grep "$PRECHROOT" /proc/mounts)" ]; then
-        return 0
+    f_dir_umount || return 1
+    if mountpoint -q "$PRECHROOT" 2>/dev/null; then
+        umount -f "$PRECHROOT" 2>/dev/null || umount -l "$PRECHROOT" 2>/dev/null || return 1
     fi
-    return 1
+    ! awk -v root="$PRECHROOT" '$5 == root || index($5, root "/") == 1 { found=1 } END { exit !found }' \
+        /proc/self/mountinfo 2>/dev/null
 }
 
 verify_fs() {
-    case "$FS_ARCH" in armhf|arm64|i386|amd64) ;; *) return 1 ;; esac
+    [ "$FS_ARCH" = arm64 ] || return 1
     case "$FS_SIZE" in full|minimal|nano) ;; *) return 1 ;; esac
     return 0
 }
 
-# do_install [optional zip containing kalifs-*]
+validate_rootfs_archive() {
+    list="$TMP/rootfs.list"
+    tar -tJf "$1" > "$list" 2>/dev/null || return 1
+    awk '
+        /^\// { bad=1 }
+        {
+            count=split($0, part, "/")
+            if (part[1] == "") bad=1
+            for (i=1; i<=count; i++) if (part[i] == "..") bad=1
+            if (top == "") top=part[1]
+            else if (part[1] != top) bad=1
+        }
+        END {
+            if (bad || top !~ /^kali-[A-Za-z0-9._-]+$/) exit 1
+            print top
+        }
+    ' "$list"
+}
+
 do_install() {
     ui_print "  - Found Kali chroot to be installed: $KALIFS"
-    mkdir -p "$NHSYS"
+    mkdir -p "$NHSYS" || return 1
 
-    CHROOT="$NHSYS/kali-$FS_ARCH"            # legacy name expected by NetHunter app
-    ROOTFS="$NHSYS/kalifs"                   # symlink for hot-swap
-    PRECHROOT=$(find /data/local/nhsystem -type d -name "kali-*" | head -n 1)
+    CHROOT="$NHSYS/kali-$FS_ARCH"
+    ROOTFS="$NHSYS/kalifs"
+    STAGE="$NHSYS/.staging-$$"
+    BACKUP="$NHSYS/.backup-$$"
+    ARCHIVE="$TMP/rootfs.tar.xz"
+    rm -rf "$STAGE" "$BACKUP"
+    mkdir -p "$STAGE" || return 1
 
-    [ -d "$PRECHROOT" ] && {
-        ui_print "  - Previous chroot detected, removing"
-        do_umount || {
-            ui_print "  ! Could not unmount previous chroot — aborting"
-            ui_print "  - Remove the old chroot manually via the NetHunter app"
-            return 1
-        }
-        rm -rf "$PRECHROOT"
-        rm -f "$ROOTFS"
+    unzip -p "$ZIPFILE" "$KALIFS" > "$ARCHIVE" || {
+        rm -rf "$STAGE" "$ARCHIVE"
+        return 1
     }
-
-    ui_print "  - Extracting Kali rootfs (this may take 10-25 minutes)"
-    if [ -n "$1" ]; then
-        unzip -p "$1" "$KALIFS" | tar -xJf - -C "$NHSYS" --exclude "kali-$FS_ARCH/dev"
-    else
-        tar -xJf "$KALIFS" -C "$NHSYS" --exclude "kali-$FS_ARCH/dev"
-    fi
-    [ $? -eq 0 ] || {
-        ui_print "  ! Kali $FS_ARCH $FS_SIZE chroot failed to extract"
-        ui_print "  - Check free space on /data"
+    TOPDIR=$(validate_rootfs_archive "$ARCHIVE") || {
+        ui_print "  ! Rootfs archive contains an unsafe or unexpected layout"
+        rm -rf "$STAGE" "$ARCHIVE"
         return 1
     }
 
-    # Some 2026.x rootfs tarballs unpack into a slightly different top-level dir;
-    # rename it to the canonical kali-$FS_ARCH so the NetHunter app finds it.
-    if [ ! -d "$NHSYS/kali-$FS_ARCH" ]; then
-        EXTRACTED=$(find "$NHSYS" -mindepth 1 -maxdepth 1 -type d -name "kali-*" | head -n 1)
-        [ -n "$EXTRACTED" ] && [ "$EXTRACTED" != "$CHROOT" ] && mv "$EXTRACTED" "$CHROOT"
+    ui_print "  - Extracting Kali rootfs (this may take 10-25 minutes)"
+    tar -xJf "$ARCHIVE" -C "$STAGE" --exclude "$TOPDIR/dev" || {
+        ui_print "  ! Kali $FS_ARCH $FS_SIZE chroot failed to extract"
+        ui_print "  - Check free space on /data"
+        rm -rf "$STAGE" "$ARCHIVE"
+        return 1
+    }
+    rm -f "$ARCHIVE"
+
+    EXTRACTED="$STAGE/$TOPDIR"
+    [ -f "$EXTRACTED/bin/sh" ] || {
+        ui_print "  ! Extracted rootfs is missing /bin/sh"
+        rm -rf "$STAGE"
+        return 1
+    }
+
+    PRECHROOT=$(find "$NHSYS" -mindepth 1 -maxdepth 1 -type d -name "kali-*" | head -n 1)
+    if [ -n "$PRECHROOT" ]; then
+        ui_print "  - Previous chroot detected, preparing replacement"
+        do_umount || {
+            ui_print "  ! Could not unmount previous chroot"
+            rm -rf "$STAGE"
+            return 1
+        }
+        mv "$PRECHROOT" "$BACKUP" || {
+            rm -rf "$STAGE"
+            return 1
+        }
     fi
 
-    ln -sf "$CHROOT" "$ROOTFS"
-    mkdir -p -m 0755 "$CHROOT/dev"
+    rm -f "$ROOTFS"
+    if ! mv "$EXTRACTED" "$CHROOT"; then
+        [ ! -d "$BACKUP" ] || mv "$BACKUP" "$PRECHROOT"
+        rm -rf "$STAGE"
+        return 1
+    fi
+    if ! mkdir -p -m 0755 "$CHROOT/dev" || ! ln -s "$CHROOT" "$ROOTFS"; then
+        rm -rf "$CHROOT" "$ROOTFS"
+        [ ! -d "$BACKUP" ] || mv "$BACKUP" "$PRECHROOT"
+        rm -rf "$STAGE"
+        return 1
+    fi
+    rm -rf "$STAGE" "$BACKUP"
     ui_print "  - Kali $FS_ARCH $FS_SIZE chroot installed"
-
-    # Drop the archive only if it was outside the zip (matches upstream)
-    [ -z "$1" ] && rm -f "$KALIFS"
     return 0
 }
 
@@ -192,30 +217,11 @@ do_chroot() {
                     FS_ARCH=$(echo "$BASE" | awk -F- '{print $5}')
                     ;;
             esac
-            verify_fs && do_install "$ZIPFILE" && return
+            verify_fs && do_install && return
         fi
     fi
 
-    # 2) Fallback locations
-    for fsdir in "$TMP" "/data/local" "/sdcard" "/external_sd"; do
-        for KALIFS in "$fsdir"/kalifs-*-*.tar.xz "$fsdir"/kali-nethunter-rootfs-*-*.tar.xz; do
-            [ -s "$KALIFS" ] || continue
-            BASE=$(basename "$KALIFS" .tar.xz)
-            case "$BASE" in
-                kalifs-*)
-                    FS_SIZE=$(echo "$BASE" | awk -F- '{print $2}')
-                    FS_ARCH=$(echo "$BASE" | awk -F- '{print $3}')
-                    ;;
-                kali-nethunter-rootfs-*)
-                    FS_SIZE=$(echo "$BASE" | awk -F- '{print $4}')
-                    FS_ARCH=$(echo "$BASE" | awk -F- '{print $5}')
-                    ;;
-            esac
-            verify_fs && do_install && return
-        done
-    done
-
-    ui_print "  ! No Kali rootfs archive found — skipping chroot install"
+    ui_print "  ! No valid arm64 Kali rootfs found in the module zip"
     return 1
 }
 
