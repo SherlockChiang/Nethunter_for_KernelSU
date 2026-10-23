@@ -13,6 +13,8 @@
 ##   * Firmware blobs ship inside the module's system/etc/firmware/ tree so a
 ##     compatible KernelSU mounting metamodule can expose them at boot.
 
+# KernelSU consumes this installer contract variable before sourcing the file.
+# shellcheck disable=SC2034
 SKIPUNZIP=1
 
 [ "$KSU" = true ] || abort "! Install this module with KernelSU Manager"
@@ -25,19 +27,12 @@ TMP="$TMPDIR/nethunter"
 
 # Targets inside the module — overlayed onto /system at boot by KernelSU.
 TARGET="$MODPATH/system"
-ETC="$TARGET/etc"
 BIN="$TARGET/bin"
 if [ -d /system/xbin ]; then
     XBIN="$TARGET/xbin"
 else
     XBIN="$TARGET/bin"
 fi
-if [ -d /system/media ]; then
-    MEDIA="$TARGET/media"
-elif [ -d /system/product/media ]; then
-    MEDIA="$TARGET/product/media"
-fi
-
 #-----------------------------------------------------------------------------
 # Helpers
 #-----------------------------------------------------------------------------
@@ -60,11 +55,11 @@ verify_artifact() {
 # Chroot installation and safe replacement.
 #-----------------------------------------------------------------------------
 f_kill_pids() {
-    local lsof_full=$(lsof 2>/dev/null | awk '{print $1}' | grep -c '^lsof')
+    lsof_full=$(lsof 2>/dev/null | awk '{print $1}' | grep -c '^lsof')
     if [ "$lsof_full" -eq 0 ]; then
-        local pids=$(lsof 2>/dev/null | grep -F -- "$PRECHROOT" | awk '$1 ~ /^[0-9]+$/ { print $1 }' | uniq)
+        pids=$(lsof 2>/dev/null | grep -F -- "$PRECHROOT" | awk '$1 ~ /^[0-9]+$/ { print $1 }' | uniq)
     else
-        local pids=$(lsof 2>/dev/null | grep -F -- "$PRECHROOT" | awk '$2 ~ /^[0-9]+$/ { print $2 }' | uniq)
+        pids=$(lsof 2>/dev/null | grep -F -- "$PRECHROOT" | awk '$2 ~ /^[0-9]+$/ { print $2 }' | uniq)
     fi
     for pid in $pids; do
         case "$pid" in
@@ -244,7 +239,7 @@ do_install() {
         rm -rf "$STAGE"
         return 1
     fi
-    if ! mkdir -p -m 0755 "$CHROOT/dev" || ! ln -s "$CHROOT" "$ROOTFS"; then
+    if ! mkdir -p "$CHROOT/dev" || ! chmod 0755 "$CHROOT/dev" || ! ln -s "$CHROOT" "$ROOTFS"; then
         rm -rf "$CHROOT" "$ROOTFS"
         if [ -d "$BACKUP" ]; then
             mv "$BACKUP" "$PRECHROOT"
