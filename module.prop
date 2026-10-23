@@ -1,7 +1,7 @@
 id=Kali-NetHunter-Ksu
 name=Kali-NetHunter for KernelSU
-version=2026.1
-versionCode=20260100
+version=2026.1.1
+versionCode=20260101
 author=Nethunter-Team @ gitlab & Uranium92
 description=Kali NetHunter apps, firmware, and arm64 chroot for KernelSU. Primary test target: Xiaomi 15; other arm64 devices are experimental.
 template=1510
