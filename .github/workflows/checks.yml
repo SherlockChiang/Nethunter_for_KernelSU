@@ -17,7 +17,7 @@ jobs:
       - name: Run repository checks
         run: bash tests/static.sh
       - name: Run ShellCheck
-        run: shellcheck -x action.sh uninstall.sh common/post-fs-data.sh common/service.sh
+        run: shellcheck -x action.sh customize.sh uninstall.sh common/post-fs-data.sh common/service.sh
 
       - name: Validate upstream lock
         run: python3 tests/sync_static.py
