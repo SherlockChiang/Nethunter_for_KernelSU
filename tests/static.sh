@@ -40,6 +40,11 @@ if grep -q -E -- '--list|ln -sf busybox_nh' common/post-fs-data.sh; then
     exit 1
 fi
 
+if grep -q 'rm -rf -- "\$NHSYS"' uninstall.sh; then
+    echo "Uninstall removes the whole shared chroot directory" >&2
+    exit 1
+fi
+
 sha256sum --check --ignore-missing artifacts.sha256
 
 python3 -m py_compile tools/sync_upstream.py

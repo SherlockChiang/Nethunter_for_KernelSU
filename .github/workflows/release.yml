@@ -1,0 +1,95 @@
+name: release KernelSU module
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - module.prop
+      - artifacts.sha256
+      - sources.lock.json
+      - data/app/**
+      - system/xbin/busybox_nh-*
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-master
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Decide whether a new module version needs a release
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version=//p' module.prop | head -n 1)
+          if [[ ! "$version" =~ ^[0-9]{4}\.[0-9]+$ ]]; then
+            echo "Invalid module version: $version" >&2
+            exit 1
+          fi
+          should_release=true
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            previous=$(git show HEAD^:module.prop 2>/dev/null | sed -n 's/^version=//p' | head -n 1 || true)
+            if [[ "$version" == "$previous" ]]; then
+              should_release=false
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+
+      - name: Install shell tools
+        if: steps.metadata.outputs.should_release == 'true'
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Download and verify locked payloads
+        if: steps.metadata.outputs.should_release == 'true'
+        run: python3 tools/sync_upstream.py --locked
+
+      - name: Run repository checks
+        if: steps.metadata.outputs.should_release == 'true'
+        run: |
+          bash tests/static.sh
+          shellcheck -x action.sh customize.sh uninstall.sh common/post-fs-data.sh common/service.sh
+
+      - name: Build release ZIP
+        if: steps.metadata.outputs.should_release == 'true'
+        shell: pwsh
+        run: ./build.ps1 -OutputPath "Nethunter_for_KernelSU-${{ steps.metadata.outputs.version }}.zip"
+
+      - name: Generate release checksum
+        if: steps.metadata.outputs.should_release == 'true'
+        shell: bash
+        run: sha256sum "Nethunter_for_KernelSU-${{ steps.metadata.outputs.version }}.zip" > "Nethunter_for_KernelSU-${{ steps.metadata.outputs.version }}.zip.sha256"
+
+      - name: Publish GitHub Release
+        if: steps.metadata.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip="Nethunter_for_KernelSU-${RELEASE_VERSION}.zip"
+          checksum="$zip.sha256"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+          gh release create "$RELEASE_TAG" "$zip" "$checksum" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "NetHunter for KernelSU $RELEASE_VERSION" \
+            --generate-notes
