@@ -25,7 +25,7 @@ jobs:
       - name: Run checks
         run: |
           bash tests/static.sh
-          shellcheck -x action.sh uninstall.sh common/post-fs-data.sh common/service.sh
+          shellcheck -x action.sh customize.sh uninstall.sh common/post-fs-data.sh common/service.sh
 
       - name: Build module ZIP
         shell: pwsh
