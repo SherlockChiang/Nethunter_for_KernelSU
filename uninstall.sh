@@ -34,15 +34,22 @@ do_umount() {
     return "$result"
 }
 
-# Tear down chroot mounts and remove the rootfs tree
+# Tear down the module-owned chroot only. Keep unrelated files under
+# /data/local/nhsystem if the directory is shared by another component.
 if [ -d "$PRECHROOT" ]; then
     if ! do_umount; then
         echo "NetHunter uninstall: chroot mounts remain; preserving $NHSYS" >&2
         exit 1
     fi
+    rm -rf -- "$PRECHROOT"
 fi
 case "$NHSYS" in
-    /data/local/nhsystem) [ -d "$NHSYS" ] && rm -rf -- "$NHSYS" ;;
+    /data/local/nhsystem)
+        if [ -L "$NHSYS/kalifs" ]; then
+            rm -f -- "$NHSYS/kalifs"
+        fi
+        rmdir "$NHSYS" 2>/dev/null || true
+        ;;
     *) echo "NetHunter uninstall: refusing unsafe path: $NHSYS" >&2; exit 1 ;;
 esac
 
