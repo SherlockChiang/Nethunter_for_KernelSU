@@ -26,10 +26,15 @@ assert set(LOCK["apps"]) == set(expected_apps)
 for name, path in expected_apps.items():
     source = LOCK["apps"][name]
     assert source["path"] == path
-    assert source["url"].startswith("https://store.nethunter.com/")
-    assert re.fullmatch(r"[0-9a-f]{128}", source["sha512"])
-    if "sha256" in source:
-        assert re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
+    assert source["url"].startswith("https://store.nethunter.com/repo/")
+    assert re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
+    assert source["packageName"] in {
+        "com.offsec.nethunter",
+        "com.offsec.nhterm",
+        "com.offsec.nethunter.kex",
+        "com.offsec.nethunter.store",
+        "com.offsec.nethunter.store.privileged",
+    }
 
 rootfs = LOCK["rootfs"]
 assert rootfs["path"] == "kali-nethunter-rootfs-minimal-arm64.tar.xz"

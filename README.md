@@ -37,8 +37,9 @@ an artifact intentionally, review its upstream source and signature, then
 update the corresponding digest in the same change.
 
 The checked-in [sources.lock.json](sources.lock.json) records the official
-NetHunter release tag and commit used for the payload URLs. To refresh the
-lock file without downloading the large artifacts, run:
+NetHunter installer tag and commit plus the App Store APK versions and
+digests used for the payload URLs. To refresh the lock file without
+downloading the large artifacts, run:
 
 ```sh
 python3 tools/sync_upstream.py --resolve-only

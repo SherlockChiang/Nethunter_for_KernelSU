@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Fetch and verify the external NetHunter payloads used by this module.
 
-The official installer keeps application URLs and SHA-512 digests in its
-build.py. The published rootfs SHA256SUMS file is the source of truth for the
-Kali rootfs. This script never replaces the KernelSU installer scripts; it
+The official NetHunter App Store index supplies the current APK filenames,
+versions, and SHA-256 digests. The published rootfs SHA256SUMS file is the
+source of truth for the Kali rootfs. The upstream installer tag is locked
+separately so this script never replaces the KernelSU installer scripts; it
 only updates payloads, the checksum manifest, and the source lock file.
 """
 
@@ -28,6 +29,7 @@ RAW_BASE = (
     "kali-nethunter-installer/-/raw"
 )
 ROOTFS_BASE = "https://kali.download/nethunter-images/current/rootfs"
+APP_INDEX_URL = "https://store.nethunter.com/repo/index-v1.json"
 USER_AGENT = "Nethunter-for-KernelSU-updater/1.0"
 
 APP_FILES = {
@@ -36,6 +38,13 @@ APP_FILES = {
     "NetHunterKeX": "data/app/NetHunterKeX.apk",
     "NetHunterStore": "data/app/NetHunterStore.apk",
     "NetHunterStorePrivilegedExtension": "data/app/NetHunterStorePrivilegedExtension.apk",
+}
+APP_PACKAGES = {
+    "NetHunter": "com.offsec.nethunter",
+    "NetHunterTerminal": "com.offsec.nhterm",
+    "NetHunterKeX": "com.offsec.nethunter.kex",
+    "NetHunterStore": "com.offsec.nethunter.store",
+    "NetHunterStorePrivilegedExtension": "com.offsec.nethunter.store.privileged",
 }
 ROOTFS_NAME = "kali-nethunter-rootfs-minimal-arm64.tar.xz"
 
@@ -87,28 +96,39 @@ def tag_commit(ref: str) -> str:
     return sha
 
 
-def parse_app_sources(build_py: str) -> dict[str, dict[str, str]]:
+def parse_app_sources(index_text: str) -> dict[str, dict[str, str]]:
+    try:
+        index = json.loads(index_text)
+        packages = index["packages"]
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise SyncError(f"invalid NetHunter App Store index: {exc}") from exc
+
     result: dict[str, dict[str, str]] = {}
-    pattern = re.compile(
-        r'"(?P<name>NetHunter(?:Terminal|KeX|Store|StorePrivilegedExtension)?)"'
-        r"\s*:\s*\[\s*"
-        r'"(?P<url>https?://[^"]+)"\s*,\s*'
-        r'"(?P<sha512>[0-9a-f]{128})"',
-        re.MULTILINE,
-    )
-    for match in pattern.finditer(build_py):
-        name = match.group("name")
-        if name in APP_FILES:
-            url = match.group("url")
-            if urllib.parse.urlparse(url).netloc != "store.nethunter.com":
-                raise SyncError(f"unexpected APK host for {name}: {url}")
-            result[name] = {
-                "url": url,
-                "sha512": match.group("sha512").lower(),
-            }
+    for name, package_name in APP_PACKAGES.items():
+        versions = packages.get(package_name)
+        if not isinstance(versions, list) or not versions:
+            raise SyncError(f"App Store index has no versions for {package_name}")
+        candidates = [item for item in versions if isinstance(item, dict)]
+        if not candidates:
+            raise SyncError(f"App Store index has invalid versions for {package_name}")
+        selected = max(candidates, key=lambda item: int(item.get("versionCode", 0)))
+        apk_name = selected.get("apkName")
+        sha256 = selected.get("hash")
+        if not isinstance(apk_name, str) or not re.fullmatch(r"[A-Za-z0-9._+-]+\.apk", apk_name):
+            raise SyncError(f"App Store index has an invalid APK name for {package_name}")
+        if selected.get("hashType") != "sha256" or not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
+            raise SyncError(f"App Store index has no SHA-256 for {package_name}")
+        url = f"https://store.nethunter.com/repo/{apk_name}"
+        result[name] = {
+            "url": url,
+            "sha256": sha256.lower(),
+            "packageName": package_name,
+            "versionName": str(selected.get("versionName", "")),
+            "versionCode": str(selected.get("versionCode", "")),
+        }
     missing = sorted(set(APP_FILES) - set(result))
     if missing:
-        raise SyncError("official build.py is missing app entries: " + ", ".join(missing))
+        raise SyncError("official App Store index is missing app entries: " + ", ".join(missing))
     return result
 
 
@@ -237,7 +257,7 @@ def read_lock(repo: Path) -> tuple[str, str, dict[str, dict[str, str]], dict[str
         raise SyncError("sources.lock.json has an unexpected app set")
     for name, path in APP_FILES.items():
         source = apps[name]
-        if source.get("path") != path or not re.fullmatch(r"[0-9a-f]{128}", source.get("sha512", "")):
+        if source.get("path") != path or not re.fullmatch(r"[0-9a-f]{64}", source.get("sha256", "")):
             raise SyncError(f"invalid locked source for {name}")
     if rootfs.get("path") != ROOTFS_NAME or not re.fullmatch(r"[0-9a-f]{64}", rootfs.get("sha256", "")):
         raise SyncError("invalid locked rootfs source")
@@ -273,8 +293,7 @@ def main() -> int:
         if not re.fullmatch(r"\d{4}\.\d+", ref):
             raise SyncError(f"unsupported upstream ref: {ref}")
         commit = tag_commit(ref)
-        build_url = f"{RAW_BASE}/{urllib.parse.quote(ref, safe='')}/build.py"
-        apps = parse_app_sources(request_bytes(build_url).decode("utf-8", errors="replace"))
+        apps = parse_app_sources(request_bytes(APP_INDEX_URL).decode("utf-8", errors="replace"))
         rootfs = rootfs_source()
 
     if args.resolve_only and args.locked:
@@ -287,7 +306,7 @@ def main() -> int:
     hashes: dict[str, str] = {}
     for name, path in APP_FILES.items():
         local = repo / path
-        hashes[path] = download_verified(apps[name]["url"], local, "sha512", apps[name]["sha512"])
+        hashes[path] = download_verified(apps[name]["url"], local, "sha256", apps[name]["sha256"])
         apps[name]["sha256"] = hashes[path]
         print(f"Updated {path}")
 
