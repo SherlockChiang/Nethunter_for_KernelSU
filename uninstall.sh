@@ -16,9 +16,14 @@ esac
     echo "NetHunter uninstall: refusing symlinked chroot root" >&2
     exit 1
 }
+if [ -L "$PRECHROOT" ]; then
+    echo "NetHunter uninstall: refusing symlinked chroot path" >&2
+    exit 1
+fi
 
 f_umount_fs() {
     path="$PRECHROOT/$1"
+    [ ! -L "$path" ] || return 1
     mountpoint -q "$path" 2>/dev/null || return 0
     umount -f "$path" 2>/dev/null || umount -l "$path" 2>/dev/null || return 1
     mountpoint -q "$path" 2>/dev/null && return 1

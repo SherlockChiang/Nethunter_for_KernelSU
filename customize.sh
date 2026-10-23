@@ -73,12 +73,17 @@ f_kill_pids() {
 
 f_restore_setup() {
     sysctl -w kernel.shmmax=134217728 2>/dev/null
-    rm -rf "$PRECHROOT"/tmp/.X11* "$PRECHROOT"/tmp/.X*-lock \
-           "$PRECHROOT"/root/.vnc/*.pid "$PRECHROOT"/root/.vnc/*.log >/dev/null 2>&1
+    if [ -d "$PRECHROOT/tmp" ] && [ ! -L "$PRECHROOT/tmp" ]; then
+        rm -f "$PRECHROOT"/tmp/.X11* "$PRECHROOT"/tmp/.X*-lock >/dev/null 2>&1
+    fi
+    if [ -d "$PRECHROOT/root/.vnc" ] && [ ! -L "$PRECHROOT/root/.vnc" ]; then
+        rm -f "$PRECHROOT"/root/.vnc/*.pid "$PRECHROOT"/root/.vnc/*.log >/dev/null 2>&1
+    fi
 }
 
 f_umount_fs() {
     path="$PRECHROOT/$1"
+    [ ! -L "$path" ] || return 1
     mountpoint -q "$path" 2>/dev/null || return 0
     umount -f "$path" 2>/dev/null || umount -l "$path" 2>/dev/null || return 1
     mountpoint -q "$path" 2>/dev/null && return 1
