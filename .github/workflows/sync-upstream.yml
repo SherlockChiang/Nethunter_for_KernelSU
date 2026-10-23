@@ -28,6 +28,7 @@ jobs:
 
       - name: Open synchronization pull request
         uses: peter-evans/create-pull-request@v7
+        continue-on-error: true
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: track latest NetHunter upstream release"
@@ -42,3 +43,9 @@ jobs:
           branch: automation/upstream-sync
           delete-branch: true
           labels: dependencies
+
+      - name: Report synchronization branch
+        if: always()
+        run: |
+          echo "The verified synchronization branch is available at:" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/${{ github.repository }}/compare/master...automation/upstream-sync?expand=1" >> "$GITHUB_STEP_SUMMARY"

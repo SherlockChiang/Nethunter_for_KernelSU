@@ -52,6 +52,10 @@ file. It never overwrites the KernelSU installer scripts. After review, the
 build workflow downloads the locked payloads again and builds the module ZIP.
 The large KeX APK and rootfs remain ignored by Git because of repository size
 limits; they are fetched and verified in each build instead of being committed.
+If repository settings forbid GitHub Actions from creating pull requests, the
+workflow still pushes the verified `automation/upstream-sync` branch and adds
+its compare link to the run summary. Enable `Allow GitHub Actions to create
+and approve pull requests` or create the PR from that link.
 
 Build and validate the module ZIP with PowerShell 5.1 or newer:
 
