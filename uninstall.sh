@@ -6,7 +6,16 @@
 ## Manager before removal if the bundled apps should also be uninstalled.
 
 NHSYS=/data/local/nhsystem
-PRECHROOT=$(find "$NHSYS" -maxdepth 1 -type d -name "kali-*" 2>/dev/null | head -n 1)
+PRECHROOT="$NHSYS/kali-arm64"
+
+case "$NHSYS" in
+    /data/local/nhsystem) ;;
+    *) echo "NetHunter uninstall: refusing unsafe path: $NHSYS" >&2; exit 1 ;;
+esac
+[ ! -L "$NHSYS" ] || {
+    echo "NetHunter uninstall: refusing symlinked chroot root" >&2
+    exit 1
+}
 
 f_umount_fs() {
     path="$PRECHROOT/$1"
@@ -36,21 +45,16 @@ do_umount() {
 
 # Tear down the module-owned chroot only. Keep unrelated files under
 # /data/local/nhsystem if the directory is shared by another component.
-if [ -d "$PRECHROOT" ]; then
+if [ -d "$PRECHROOT" ] && [ ! -L "$PRECHROOT" ]; then
     if ! do_umount; then
         echo "NetHunter uninstall: chroot mounts remain; preserving $NHSYS" >&2
         exit 1
     fi
     rm -rf -- "$PRECHROOT"
 fi
-case "$NHSYS" in
-    /data/local/nhsystem)
-        if [ -L "$NHSYS/kalifs" ]; then
-            rm -f -- "$NHSYS/kalifs"
-        fi
-        rmdir "$NHSYS" 2>/dev/null || true
-        ;;
-    *) echo "NetHunter uninstall: refusing unsafe path: $NHSYS" >&2; exit 1 ;;
-esac
+if [ -L "$NHSYS/kalifs" ]; then
+    rm -f -- "$NHSYS/kalifs"
+fi
+rmdir "$NHSYS" 2>/dev/null || true
 
 exit 0

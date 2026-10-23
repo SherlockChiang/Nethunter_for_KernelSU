@@ -60,15 +60,19 @@ verify_artifact() {
 # Chroot installation and safe replacement.
 #-----------------------------------------------------------------------------
 f_kill_pids() {
-    local lsof_full=$(lsof | awk '{print $1}' | grep -c '^lsof')
+    local lsof_full=$(lsof 2>/dev/null | awk '{print $1}' | grep -c '^lsof')
     if [ "$lsof_full" -eq 0 ]; then
-        local pids=$(lsof | grep "$PRECHROOT" | awk '{print $1}' | uniq)
+        local pids=$(lsof 2>/dev/null | grep -F -- "$PRECHROOT" | awk '$1 ~ /^[0-9]+$/ { print $1 }' | uniq)
     else
-        local pids=$(lsof | grep "$PRECHROOT" | awk '{print $2}' | uniq)
+        local pids=$(lsof 2>/dev/null | grep -F -- "$PRECHROOT" | awk '$2 ~ /^[0-9]+$/ { print $2 }' | uniq)
     fi
-    if [ -n "$pids" ]; then
-        kill -9 $pids 2>/dev/null
-    fi
+    for pid in $pids; do
+        case "$pid" in
+            ''|*[!0-9]*) continue ;;
+        esac
+        [ "$pid" -gt 1 ] 2>/dev/null || continue
+        kill -9 "$pid" 2>/dev/null || true
+    done
     return 0
 }
 
@@ -133,9 +137,36 @@ validate_rootfs_archive() {
     ' "$list"
 }
 
+validate_rootfs_links() {
+    # Hardlinks must point at another member inside the same rootfs.
+    tar -tvJf "$1" 2>/dev/null | awk -v top="$2" '
+        $1 ~ /^h/ && / link to / {
+            target=$0
+            sub(/^.* link to /, "", target)
+            if (target !~ ("^" top "/")) bad=1
+            if (target ~ /(^|\/)\.\.($|\/)/ || target ~ /^\//) bad=1
+        }
+        END { exit bad }
+    '
+}
+
+validate_nhsys() {
+    case "$NHSYS" in
+        /data/local/nhsystem) ;;
+        *) return 1 ;;
+    esac
+    [ ! -L "$NHSYS" ] || return 1
+    [ ! -e "$NHSYS" ] || [ -d "$NHSYS" ] || return 1
+    mkdir -p "$NHSYS" || return 1
+    [ -d "$NHSYS" ] && [ ! -L "$NHSYS" ]
+}
+
 do_install() {
     ui_print "  - Found Kali chroot to be installed: $KALIFS"
-    mkdir -p "$NHSYS" || return 1
+    validate_nhsys || {
+        ui_print "  ! Refusing unsafe /data/local/nhsystem path"
+        return 1
+    }
 
     CHROOT="$NHSYS/kali-$FS_ARCH"
     ROOTFS="$NHSYS/kalifs"
@@ -159,6 +190,11 @@ do_install() {
         rm -rf "$STAGE" "$ARCHIVE"
         return 1
     }
+    validate_rootfs_links "$ARCHIVE" "$TOPDIR" || {
+        ui_print "  ! Rootfs archive contains an unsafe hardlink"
+        rm -rf "$STAGE" "$ARCHIVE"
+        return 1
+    }
 
     ui_print "  - Extracting Kali rootfs (this may take 10-25 minutes)"
     tar -xJf "$ARCHIVE" -C "$STAGE" --exclude "$TOPDIR/dev" || {
@@ -176,7 +212,13 @@ do_install() {
         return 1
     }
 
-    PRECHROOT=$(find "$NHSYS" -mindepth 1 -maxdepth 1 -type d -name "kali-*" | head -n 1)
+    PRECHROOT="$CHROOT"
+    if [ -L "$PRECHROOT" ]; then
+        ui_print "  ! Refusing a symlink at the expected chroot path"
+        rm -rf "$STAGE"
+        return 1
+    fi
+    [ -d "$PRECHROOT" ] || PRECHROOT=""
     if [ -n "$PRECHROOT" ]; then
         ui_print "  - Previous chroot detected, preparing replacement"
         do_umount || {
@@ -190,7 +232,13 @@ do_install() {
         }
     fi
 
-    rm -f "$ROOTFS"
+    if [ -e "$ROOTFS" ] && [ ! -L "$ROOTFS" ]; then
+        ui_print "  ! Refusing to replace a non-symlink at $ROOTFS"
+        [ ! -d "$BACKUP" ] || mv "$BACKUP" "$PRECHROOT"
+        rm -rf "$STAGE"
+        return 1
+    fi
+    rm -f -- "$ROOTFS"
     if ! mv "$EXTRACTED" "$CHROOT"; then
         [ ! -d "$BACKUP" ] || mv "$BACKUP" "$PRECHROOT"
         rm -rf "$STAGE"
