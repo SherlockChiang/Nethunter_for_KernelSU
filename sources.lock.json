@@ -1,0 +1,40 @@
+{
+  "upstream": {
+    "project": "kalilinux/nethunter/build-scripts/kali-nethunter-installer",
+    "ref": "2026.1",
+    "commit": "f1b464c1f2dadb1d4a8f7b1f2e3241301b209387"
+  },
+  "apps": {
+    "NetHunter": {
+      "path": "data/app/NetHunter.apk",
+      "url": "https://store.nethunter.com/NetHunter.apk",
+      "sha512": "735cb0a284ad467261c8b736cce4736dbaee7d79f0d9e1b2cccfc00b98514c2b04112c680633e3446251bec10f0bbc11a452c9e2a8de79409957e635d6689be4"
+    },
+    "NetHunterTerminal": {
+      "path": "data/app/NetHunterTerminal.apk",
+      "url": "https://store.nethunter.com/NetHunterTerminal.apk",
+      "sha512": "c95d5e4e4566f93f79cb3e9cdb0f10785085320dfb4e1fd1a112cacbd676c8eeb5a418edc91946efc0c350ba5e8ecabf0a060fed8e1900eb3d46af2e9c86c3a0"
+    },
+    "NetHunterKeX": {
+      "path": "data/app/NetHunterKeX.apk",
+      "url": "https://store.nethunter.com/NetHunterKeX.apk",
+      "sha512": "da4dddc0090220f4b05db7a2421a7f90344a19af046d41da8915438dfbef3dcfef6535d34ba3fcaccbd4e1176a06f7472080f31f292bf61d1f8b790bec40126d"
+    },
+    "NetHunterStore": {
+      "path": "data/app/NetHunterStore.apk",
+      "url": "https://store.nethunter.com/NetHunterStore.apk",
+      "sha512": "78e2e8e3ffe1d9ef60024a2daed733e360e9141dc517da1329e7e7b7db8fc34f2080055566ddde177ecda121c74a394d5aad5aff951d7d9b6aa17e052eb4d341"
+    },
+    "NetHunterStorePrivilegedExtension": {
+      "path": "data/app/NetHunterStorePrivilegedExtension.apk",
+      "url": "https://store.nethunter.com/NetHunterStorePrivilegedExtension.apk",
+      "sha512": "7241517d38c3d3aa76c652efbe98e73392f3afd65a230c9d95fe5408b76eb0fc850629c00960a2c73c3b26a9eaf617c2c910996f26f11e42972326c6f1ddd0c8"
+    }
+  },
+  "rootfs": {
+    "path": "kali-nethunter-rootfs-minimal-arm64.tar.xz",
+    "url": "https://kali.download/nethunter-images/current/rootfs/kali-nethunter-rootfs-minimal-arm64.tar.xz",
+    "sha256": "d6403a5da175df325611d23af4b92330856059c45454eced7f4cdf3ca6df2e4e",
+    "sums_url": "https://kali.download/nethunter-images/current/rootfs/SHA256SUMS"
+  }
+}

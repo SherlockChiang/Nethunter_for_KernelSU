@@ -18,3 +18,6 @@ jobs:
         run: bash tests/static.sh
       - name: Run ShellCheck
         run: shellcheck -x action.sh uninstall.sh common/post-fs-data.sh common/service.sh
+
+      - name: Validate upstream lock
+        run: python3 tests/sync_static.py

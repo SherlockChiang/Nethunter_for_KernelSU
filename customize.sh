@@ -273,12 +273,15 @@ install_nethunter() {
     unzip -qq "$ZIPFILE" -x "kalifs-*" "kali-nethunter-rootfs-*" >&2 \
         || abort "! Failed to extract installer payload"
     [ -f "$TMP/artifacts.sha256" ] || abort "! Artifact checksum manifest is missing"
+    BUNDLE_BUSYBOX=$(awk '$2 ~ /^system\/xbin\/busybox_nh-/ { print $2; exit }' \
+        "$TMP/artifacts.sha256")
+    [ -n "$BUNDLE_BUSYBOX" ] || abort "! Bundled NetHunter BusyBox is not listed"
     for artifact in data/app/NetHunter.apk \
                     data/app/NetHunterTerminal.apk \
                     data/app/NetHunterKeX.apk \
                     data/app/NetHunterStore.apk \
                     data/app/NetHunterStorePrivilegedExtension.apk \
-                    system/xbin/busybox_nh-1.37.0 \
+                    "$BUNDLE_BUSYBOX" \
                     system/xbin/hid-keyboard \
                     tools/screenres; do
         verify_artifact "$artifact" "$TMP/$artifact" \
@@ -335,8 +338,12 @@ install_nethunter() {
                  READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE; do
             pm grant --user 0 com.offsec.nethunter "android.permission.$x" >/dev/null 2>&1 || true
         done
-        [ "$API" -lt 29 ] || pm grant --user 0 com.offsec.nethunter \
-            android.permission.ACCESS_BACKGROUND_LOCATION >/dev/null 2>&1 || true
+        API=${API:-$(getprop ro.build.version.sdk 2>/dev/null)}
+        case "$API" in
+            ''|*[!0-9]*) ;;
+            *) [ "$API" -lt 29 ] || pm grant --user 0 com.offsec.nethunter \
+                android.permission.ACCESS_BACKGROUND_LOCATION >/dev/null 2>&1 || true ;;
+        esac
     fi
 
     if [ -d /data/data/com.offsec.nethunter/assets/scripts ]; then

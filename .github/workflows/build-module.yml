@@ -1,0 +1,39 @@
+name: build KernelSU module
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download the locked upstream payloads
+        run: python3 tools/sync_upstream.py --locked
+
+      - name: Install shell tools
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run checks
+        run: |
+          bash tests/static.sh
+          shellcheck -x action.sh uninstall.sh common/post-fs-data.sh common/service.sh
+
+      - name: Build module ZIP
+        shell: pwsh
+        run: ./build.ps1 -OutputPath "Nethunter_for_KernelSU-${{ github.ref_name }}.zip"
+
+      - name: Upload module ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nethunter_for_KernelSU-${{ github.ref_name }}
+          path: Nethunter_for_KernelSU-${{ github.ref_name }}.zip
+          if-no-files-found: error

@@ -21,11 +21,11 @@ metamodule.
 
 ## Build Inputs
 
-The following files exceed GitHub's normal file limit and are downloaded
-separately:
+The large payloads are downloaded separately:
 
-1. Put `NetHunterKeX.apk` in `data/app/`.
-2. Put `kali-nethunter-rootfs-minimal-arm64.tar.xz` in the repository root.
+1. Run `python3 tools/sync_upstream.py` to fetch the locked APKs and rootfs.
+2. For an offline/manual build, place all five APKs under `data/app/` and
+   place `kali-nethunter-rootfs-minimal-arm64.tar.xz` in the repository root.
 3. Verify every input against `artifacts.sha256`:
 
 ```sh
@@ -35,6 +35,22 @@ sha256sum --check artifacts.sha256
 The installer rejects payloads that do not match this manifest. When updating
 an artifact intentionally, review its upstream source and signature, then
 update the corresponding digest in the same change.
+
+The checked-in [sources.lock.json](sources.lock.json) records the official
+NetHunter release tag and commit used for the payload URLs. To refresh the
+lock file without downloading the large artifacts, run:
+
+```sh
+python3 tools/sync_upstream.py --resolve-only
+```
+
+The scheduled sync workflow runs the updater and opens a pull request when
+the official stable release or one of its payloads changes. It downloads all
+five APKs and the arm64 rootfs, then updates artifacts.sha256 and the lock
+file. It never overwrites the KernelSU installer scripts. After review, the
+build workflow downloads the locked payloads again and builds the module ZIP.
+The large KeX APK and rootfs remain ignored by Git because of repository size
+limits; they are fetched and verified in each build instead of being committed.
 
 Build and validate the module ZIP with PowerShell 5.1 or newer:
 

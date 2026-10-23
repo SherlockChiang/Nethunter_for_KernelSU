@@ -14,6 +14,9 @@ kali-nethunter-rootfs-minimal-arm64.tar.xz
 source/
 
 # Editor / OS junk
+.pytest_cache/
+__pycache__/
+*.py[cod]
 .vscode/
 .idea/
 Thumbs.db

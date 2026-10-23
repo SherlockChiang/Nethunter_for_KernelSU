@@ -42,4 +42,7 @@ fi
 
 sha256sum --check --ignore-missing artifacts.sha256
 
+python3 -m py_compile tools/sync_upstream.py
+python3 tests/sync_static.py
+
 echo "Static checks passed"

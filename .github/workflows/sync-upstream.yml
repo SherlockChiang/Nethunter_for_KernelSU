@@ -1,0 +1,44 @@
+name: sync upstream NetHunter payloads
+
+on:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download and verify latest stable NetHunter payloads
+        run: python3 tools/sync_upstream.py
+
+      - name: Run repository checks
+        run: bash tests/static.sh
+
+      - name: Open synchronization pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: track latest NetHunter upstream release"
+          title: "chore: track latest NetHunter upstream release"
+          body: |
+            Updates the locked NetHunter upstream tag, commit, APK source
+            digests, rootfs source digest, and module version metadata.
+
+            The release workflow downloads and verifies the locked payloads
+            before building the KernelSU ZIP. KernelSU installer scripts are
+            intentionally not overwritten by this synchronization job.
+          branch: automation/upstream-sync
+          delete-branch: true
+          labels: dependencies
