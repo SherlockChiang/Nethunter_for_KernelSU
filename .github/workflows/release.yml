@@ -28,9 +28,6 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Download and verify locked payloads
-        run: python3 tools/sync_upstream.py --locked
-
       - name: Decide whether a new module version needs a release
         id: metadata
         shell: bash
@@ -51,6 +48,10 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+
+      - name: Download and verify locked payloads
+        if: steps.metadata.outputs.should_release == 'true'
+        run: python3 tools/sync_upstream.py --locked
 
       - name: Install shell tools
         if: steps.metadata.outputs.should_release == 'true'

@@ -218,6 +218,11 @@ do_install() {
         rm -rf "$STAGE"
         return 1
     fi
+    if [ -e "$PRECHROOT" ] && [ ! -d "$PRECHROOT" ]; then
+        ui_print "  ! Refusing a non-directory at the expected chroot path"
+        rm -rf "$STAGE"
+        return 1
+    fi
     [ -d "$PRECHROOT" ] || PRECHROOT=""
     if [ -n "$PRECHROOT" ]; then
         ui_print "  - Previous chroot detected, preparing replacement"
