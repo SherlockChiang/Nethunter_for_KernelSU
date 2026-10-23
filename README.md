@@ -57,6 +57,13 @@ workflow still pushes the verified `automation/upstream-sync` branch and adds
 its compare link to the run summary. Enable `Allow GitHub Actions to create
 and approve pull requests` or create the PR from that link.
 
+After a version-changing synchronization is merged into `master`,
+`.github/workflows/release.yml` verifies the locked payloads, runs the repository
+checks, builds the ZIP, writes its SHA-256 file, and publishes the matching
+`vYYYY.N` or `vYYYY.N.P` GitHub Release. Changes that only refresh checksums or
+workflow files do not create a duplicate release. The PR still requires the
+repository's normal merge decision; release publication starts after the merge.
+
 Build and validate the module ZIP with PowerShell 5.1 or newer:
 
 ```powershell
@@ -77,7 +84,10 @@ checks that the native KernelSU entry points are present at the ZIP root.
 
 The installer updates existing APKs in place and stages the new rootfs before
 replacing the previous one. A failed rootfs extraction keeps the previous
-chroot intact.
+chroot intact. The install and uninstall hooks operate only on the exact
+module-owned `/data/local/nhsystem/kali-arm64` directory, reject symlinked
+shared roots, validate archive paths and hardlink targets, and preserve unrelated
+files under `/data/local/nhsystem`.
 
 ## Uninstallation
 
