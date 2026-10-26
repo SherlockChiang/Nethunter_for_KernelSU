@@ -49,7 +49,7 @@
   "rootfs": {
     "path": "kali-nethunter-rootfs-minimal-arm64.tar.xz",
     "url": "https://kali.download/nethunter-images/current/rootfs/kali-nethunter-rootfs-minimal-arm64.tar.xz",
-    "sha256": "d6403a5da175df325611d23af4b92330856059c45454eced7f4cdf3ca6df2e4e",
+    "sha256": "96aeced81a857a987715a14417af05c2934e3e19052d6151c398a1c215448b60",
     "sums_url": "https://kali.download/nethunter-images/current/rootfs/SHA256SUMS"
   }
 }
